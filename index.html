@@ -1,0 +1,212 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Listn</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"></script>
+</head>
+<body>
+    <div id="loader" class="loader">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <p id="modal-message"></p>
+            <button onclick="closeModal()">OK</button>
+        </div>
+    </div>
+
+    <div id="login-container" class="auth-container">
+        <div class="auth-box">
+            <h1>Listn</h1>
+            <p>Login to access the hacks.</p>
+            <input type="text" id="login-username" placeholder="Username">
+            <input type="password" id="login-password" placeholder="Password">
+            <button onclick="login()">Login</button>
+            <div class="switch">
+                Need an account? <a href="#" onclick="switchAuth('register')">Register</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="register-container" class="auth-container">
+        <div class="auth-box">
+            <h1>Listn</h1>
+            <p>Register to join the crew.</p>
+            <input type="text" id="register-username" placeholder="Username">
+            <input type="password" id="register-password" placeholder="Password">
+            <div id="invite-code-container"></div>
+            <button onclick="register()">Register</button>
+            <div class="switch">
+                Already have an account? <a href="#" onclick="switchAuth('login')">Login</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard" class="dashboard">
+        <div class="sidebar">
+            <div class="profile">
+                <img id="user-avatar" class="avatar" style="display: none;">
+                <h2 id="user-username"></h2>
+                <p id="user-id-region"></p>
+            </div>
+            <button onclick="downloadClient()" class="sidebar-button">Download Client</button>
+            <ul>
+                <li><a href="#" onclick="showSection('subscriptions')">Subscriptions</a></li>
+                <li><a href="#" onclick="showSection('settings')">Settings</a></li>
+                <li><a href="#" onclick="showSection('workshop')">Workshop</a></li>
+                <li><a href="#" onclick="showSection('security')">Security</a></li>
+                <li><a href="https://discord.gg/your-discord" target="_blank">Support (Discord)</a></li>
+                <li><a href="#" onclick="logout()">Logout</a></li>
+            </ul>
+            <div class="terms">
+                Terms | Privacy | Refund<br>
+                © 2021-2025 Listn
+            </div>
+        </div>
+
+        <div id="main-content" class="main-content">
+            <div id="subscriptions-section" class="subscriptions">
+                <div class="promo">
+                    <h3>Promo Activation</h3>
+                    <p>Get a discount or subscription with a promo code.</p>
+                    <div class="input-button-group">
+                        <input type="text" id="promo-code" placeholder="Promo Code">
+                        <button onclick="activatePromo()">Activate</button>
+                    </div>
+                </div>
+                <h3>Subscriptions</h3>
+                <p>Unlock power in a few clicks.</p>
+                <div class="sub-grid">
+                    <div class="sub-item">
+                        <span>CS2 Fatal</span>
+                        <p>Active till 06/08/2025 03:30</p>
+                        <div class="button-group">
+                            <button onclick="buyExtend('CS2 Fatal', 16.00)">Extend ($16.00)</button>
+                            <button onclick="gift('CS2 Fatal')">Gift</button>
+                        </div>
+                    </div>
+                    <div class="sub-item">
+                        <span>CS2 Compkiller</span>
+                        <p>No subscription</p>
+                        <div class="button-group">
+                            <button onclick="buyExtend('CS2 Compkiller', 7.00)">Buy ($7.00)</button>
+                            <button onclick="gift('CS2 Compkiller')">Gift</button>
+                        </div>
+                    </div>
+                    <div class="sub-item">
+                        <span>CS2 Primordial</span>
+                        <p>No subscription</p>
+                        <div class="button-group">
+                            <button onclick="buyExtend('CS2 Primordial', 10.00)">Buy ($10.00)</button>
+                            <button onclick="gift('CS2 Primordial')">Gift</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="about">
+                    <h3>About Subscriptions</h3>
+                    <p>After payment, you gain access to the purchased DLC.</p>
+                </div>
+            </div>
+
+            <div id="settings-section" class="settings">
+                <h3>Settings</h3>
+                <p>Customize your account settings.</p>
+                <div class="settings-form">
+                    <h4>Change Username</h4>
+                    <input type="text" id="new-username" placeholder="New Username">
+                    <button onclick="changeUsername()">Update Username</button>
+                    <h4>Change Password</h4>
+                    <input type="password" id="current-password" placeholder="Current Password">
+                    <input type="password" id="new-password" placeholder="New Password">
+                    <input type="password" id="confirm-new-password" placeholder="Confirm New Password">
+                    <button onclick="changePassword()">Update Password</button>
+                    <h4>Change Profile Picture</h4>
+                    <input type="file" id="pfp-file" accept="image/*">
+                    <button onclick="changePfp()">Update Profile Picture</button>
+                </div>
+            </div>
+
+            <div id="workshop-section" class="workshop">
+                <h3>Workshop</h3>
+                <p>Explore community creations.</p>
+            </div>
+
+            <div id="security-section" class="security">
+                <h3>Security</h3>
+                <p>Manage your account security.</p>
+            </div>
+
+            <div id="admin-section" class="admin" style="display: none;">
+                <h3>Admin Panel</h3>
+                <p>Manage user accounts and unused invite codes</p>
+                <div class="admin-form">
+                    <h4>User Management</h4>
+                    <select id="admin-user-select">
+                        <option value="">Select a user</option>
+                    </select>
+                    <h4>Ban User</h4>
+                    <button onclick="banUser()">Ban Selected User</button>
+                    <h4>Change User ID</h4>
+                    <input type="text" id="admin-new-uid" placeholder="New User ID">
+                    <button onclick="changeUserId()">Update User ID</button>
+                    <h4>Change User Password</h4>
+                    <input type="password" id="admin-new-password" placeholder="New Password">
+                    <button onclick="changeUserPassword()">Update User Password</button>
+                    <h4>Unused Invite Codes</h4>
+                    <div id="invite-codes-list" class="invite-codes"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="scripts.js"></script>
+</body>
+</html>
